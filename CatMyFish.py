@@ -9,9 +9,9 @@ import argparse
 
 from bs4 import BeautifulSoup
 
-version = "1.0"
+VERSION = "1.0"
 words = []
-urls = {"expireddomain": {"get": "/domain-name-search/?q=",
+URLS = {"expireddomain": {"get": "/domain-name-search/?q=",
                           "post": "fdomainstart=&fdomain=&fdomainend=&flists%5B%5D=1&ftrmaxhost=0&ftrminhost=0&ftrbl=0&ftrdomainpop=0&ftrabirth_year=0&ftlds%5B%5D=2&button_submit=Apply+Filter&q=",
                           "host":
                               "https://www.expireddomains.net",
@@ -43,9 +43,9 @@ def estimate_bluecoat_time(num_hosts):
     return output
 
 def check_domain(candidate):
-    request = urllib2.Request(urls["checkdomain"]["host"] + urls["checkdomain"]["get"] + candidate.split(".")[0])
+    request = urllib2.Request(URLS["checkdomain"]["host"] + URLS["checkdomain"]["get"] + candidate.split(".")[0])
     request.add_header("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:49.0) Gecko/20100101 Firefox/49.0")
-    request.add_header("Referer", urls["checkdomain"]["host"])
+    request.add_header("Referer", URLS["checkdomain"]["host"])
     response = urllib2.urlopen(request)
     return (not (response.read().find("is still available") == -1))
 
@@ -57,20 +57,20 @@ def get_hosts_from_keywords(keywords):
     """
     hosts = []
     for keyword in keywords:
-        request = urllib2.Request(urls["expireddomain"]["host"])
+        request = urllib2.Request(URLS["expireddomain"]["host"])
         request.add_header("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:49.0) Gecko/20100101 Firefox/49.0")
         response = urllib2.urlopen(request)
         cookies = "ExpiredDomainssessid=" + \
                   response.info().getheader("Set-Cookie").split("ExpiredDomainssessid=")[1].split(";")[0] + "; urih="
         cookies = cookies + response.info().getheader("Set-Cookie").split("urih=")[1].split(";")[0] + "; "
 
-        request = urllib2.Request(urls["expireddomain"]["host"] + urls["expireddomain"]["get"] + keyword)
+        request = urllib2.Request(URLS["expireddomain"]["host"] + URLS["expireddomain"]["get"] + keyword)
         request.add_header("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:49.0) Gecko/20100101 Firefox/49.0")
-        request.add_header("Referer", urls["expireddomain"]["referer"])
+        request.add_header("Referer", URLS["expireddomain"]["referer"])
         # the _pk_id is hardcoded for now
         request.add_header("Cookie",
                            cookies + "_pk_ses.10.dd0a=*; _pk_id.10.dd0a=5abbbc772cbacfb2.1496158514.1.1496158514.1496158514")
-        response = urllib2.urlopen(request, urls["expireddomain"]["post"] + keyword)
+        response = urllib2.urlopen(request, URLS["expireddomain"]["post"] + keyword)
         html = BeautifulSoup(response.read(), "html.parser")
 
         tds = html.findAll("td", {"class": "field_domain"})
@@ -108,12 +108,12 @@ def get_category(host):
     :param host: The host for which to check the category
     :return: the category for the host
     """
-    request = urllib2.Request(urls["bluecoat"]["host"] + urls["bluecoat"]["get"])
+    request = urllib2.Request(URLS["bluecoat"]["host"] + URLS["bluecoat"]["get"])
     request.add_header("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:49.0) Gecko/20100101 Firefox/49.0")
-    request.add_header("Origin", urls["bluecoat"]["host"])
+    request.add_header("Origin", URLS["bluecoat"]["host"])
     request.add_header("Referer", "https://sitereview.bluecoat.com/sitereview.jsp")
     request.add_header("X-Requested-With", "XMLHttpRequest")
-    response = urllib2.urlopen(request, urls["bluecoat"]["post"] + host)
+    response = urllib2.urlopen(request, URLS["bluecoat"]["post"] + host)
     try:
         json_data = json.loads(response.read())
         if json_data.has_key("errorType"):
@@ -130,7 +130,7 @@ def get_category(host):
 
 
 def main():
-    print "CatMyFish v%s" % version
+    print "CatMyFish v%s" % VERSION
     print "Mr.Un1k0d3r - RingZer0 Team 2016\n"
 
     hosts = []
@@ -182,7 +182,7 @@ def main():
         if "..." in host:
             if verbose:
                 print "[-] Incomplete domain name from ExpiredDomains: %s . Skipping" % host
-            next
+            continue
         cat = get_category(host)
         if not cat in blacklisted:
             print "[+] Potential candidate: %s categorized as %s." % (host, cat)
