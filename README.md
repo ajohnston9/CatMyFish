@@ -6,12 +6,14 @@ It relies on expireddomains.net to obtain a list of expired domains. The domain 
 
 # Usage
 ```
-$ python CatMyFish.py -h
-CatMyFish v1.0 - Search for available already categorized domain
+$ ./CatMyFish.py --help
+CatMyFish v1.0
 Mr.Un1k0d3r - RingZer0 Team 2016
 
-usage: CatMyFish.py [-h] [-v] [-e] [-f FILENAME] [-o OUTPUT]
+usage: CatMyFish.py [-h] [-v] [-e] [-f FILENAME] [-r RANDOM] [-o OUTPUT]
                     [keywords [keywords ...]]
+
+Search for available already categorized domain
 
 positional arguments:
   keywords              Keyword to use when search for expired domains
@@ -23,6 +25,8 @@ optional arguments:
   -f FILENAME, --filename FILENAME
                         Loads domains to check from a text file, instead of
                         searching
+  -r RANDOM, --random RANDOM
+                        Chose a random number of common words as keywords
   -o OUTPUT, --output OUTPUT
                         Write unregistered, categorized domains to a file.
 ```
