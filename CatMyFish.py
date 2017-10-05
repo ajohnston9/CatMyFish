@@ -1,3 +1,4 @@
+#!/usr/bin/python
 import urllib2
 import os
 import sys
@@ -6,8 +7,47 @@ import json
 import random
 import argparse
 
-version = "1.0"
+from bs4 import BeautifulSoup
 
+version = "1.0"
+words = []
+urls = {"expireddomain": {"get": "/domain-name-search/?q=",
+                          "post": "fdomainstart=&fdomain=&fdomainend=&flists%5B%5D=1&ftrmaxhost=0&ftrminhost=0&ftrbl=0&ftrdomainpop=0&ftrabirth_year=0&ftlds%5B%5D=2&button_submit=Apply+Filter&q=",
+                          "host":
+                              "https://www.expireddomains.net",
+                          "referer": "https://www.expireddomains.net/domain-name-search/?q=&searchinit=1"}, \
+        "bluecoat": {"get": "/rest/categorization", "post": "url=", "host": "https://sitereview.bluecoat.com",
+                     "referer": None}, \
+        "checkdomain": {"get": "/cgi-bin/checkdomain.pl?domain=", "post": None,
+                        "host": "http://www.checkdomain.com"}}
+
+# Values are in seconds
+MIN_BLUECOAT_TIME = 10
+MAX_BLUECOAT_TIME = 20
+
+
+def estimate_bluecoat_time(num_hosts):
+    """
+    Gives an estimate of long it will take to check Bluecoat. Does a simple expected value calculation assuming a
+    uniform distribution in the random wait times.
+    :param num_hosts:
+    :return:
+    """
+    avg = (num_hosts * (MIN_BLUECOAT_TIME + MAX_BLUECOAT_TIME)) / 2
+    mins = int(avg / 60)
+    secs = avg % 60
+    output = ""
+    if mins > 0:
+        output += str(mins) + "m"
+    output += str(secs) + "s"
+    return output
+
+def check_domain(candidate):
+    request = urllib2.Request(urls["checkdomain"]["host"] + urls["checkdomain"]["get"] + candidate.split(".")[0])
+    request.add_header("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:49.0) Gecko/20100101 Firefox/49.0")
+    request.add_header("Referer", urls["checkdomain"]["host"])
+    response = urllib2.urlopen(request)
+    return (not (response.read().find("is still available") == -1))
 
 def get_hosts_from_keywords(keywords):
     """
@@ -46,6 +86,22 @@ def get_hosts_from_keywords(keywords):
     return hosts
 
 
+def get_random_keywords(num=10):
+    """
+    Gets random keywords from the list of 1,000 most common English words.
+    :param num: the number of random keywords to get
+    :return: num keywords from the file
+    """
+    if len(words) == 0:  # Only load file once, even if called multiple times
+        try:
+            with open('1000-common-words.txt', 'r') as f:
+                for line in f:
+                    words.append(line.strip())
+        except:
+            print "Unable to open 1000-common-words.txt. Make sure the file exists and is readable."
+    return random.sample(words, num)
+
+
 def get_category(host):
     """
     Gets the Symantec category for a given host.
@@ -73,45 +129,31 @@ def get_category(host):
         print "[-] Something when wrong, unable to get category for %s" % host
 
 
-if __name__ == "__main__":
-    print "CatMyFish v%s - Search for available already categorized domain" % version
+def main():
+    print "CatMyFish v%s" % version
     print "Mr.Un1k0d3r - RingZer0 Team 2016\n"
-
-    try:
-        from bs4 import BeautifulSoup
-    except:
-        print "[-] Fatal error: bs4 not found"
-        print "Please run: pip install beautifulsoup4"
-        sys.exit(0)
 
     hosts = []
     candidates = []
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Search for available already categorized domain")
     parser.add_argument("-v", "--verbose", help="More verbose output", action="store_true")
     parser.add_argument("-e", "--exitone", help="Stop querying Symantec after first success", action="store_true")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("-f", "--filename", help="Loads domains to check from a text file, instead of searching",
                        type=str)
-    parser.add_argument("-o", "--output", type=str, help="Write unregistered, categorized domains to a file.")
     group.add_argument("keywords", help="Keyword to use when search for expired domains", nargs='*', default=[])
+    group.add_argument("-r", "--random", type=int, help="Chose a random number of common words as keywords")
+    parser.add_argument("-o", "--output", type=str, help="Write unregistered, categorized domains to a file.")
     args = parser.parse_args()
 
     verbose = args.verbose
     exitone = args.exitone
     keywords = args.keywords
+    num_random = args.random
     domain_file = args.filename
     output_file = args.output
 
-    urls = {"expireddomain": {"get": "/domain-name-search/?q=",
-                              "post": "fdomainstart=&fdomain=&fdomainend=&flists%5B%5D=1&ftrmaxhost=0&ftrminhost=0&ftrbl=0&ftrdomainpop=0&ftrabirth_year=0&ftlds%5B%5D=2&button_submit=Apply+Filter&q=",
-                              "host":
-                                  "https://www.expireddomains.net",
-                              "referer": "https://www.expireddomains.net/domain-name-search/?q=&searchinit=1"}, \
-            "bluecoat": {"get": "/rest/categorization", "post": "url=", "host": "https://sitereview.bluecoat.com",
-                         "referer": None}, \
-            "checkdomain": {"get": "/cgi-bin/checkdomain.pl?domain=", "post": None,
-                            "host": "http://www.checkdomain.com"}}
     # TODO: Need to add more to that list
     blacklisted = ["Phishing", "Web Ads/Analytics", "Suspicious", "Shopping", "Uncategorized", "Placeholders",
                    "Pornography", "Spam", "Gambling", "Scam/Questionable/Illegal", " Malicious Sources/Malnets"]
@@ -121,7 +163,11 @@ if __name__ == "__main__":
 
     if args.filename and not os.path.exists(domain_file):
         print "[-] \"%s\" not found." % domain_file
-        exit(0)
+        exit(-1)
+
+    if num_random > 0:
+        keywords = get_random_keywords(num_random)
+        print "[+] Selected keywords: %s" % ','.join(keywords)
 
     if not args.filename:
         hosts = get_hosts_from_keywords(keywords)
@@ -131,8 +177,12 @@ if __name__ == "__main__":
         print "[+] (%d) domains loaded." % (len(hosts))
 
     print "[+] Symantec categorization check may take several minutes. Bot check is pretty aggressive..."
-
+    print "[+] Estimated Time: " + estimate_bluecoat_time(len(hosts))
     for host in hosts:
+        if "..." in host:
+            if verbose:
+                print "[-] Incomplete domain name from ExpiredDomains: %s . Skipping" % host
+            next
         cat = get_category(host)
         if not cat in blacklisted:
             print "[+] Potential candidate: %s categorized as %s." % (host, cat)
@@ -142,20 +192,15 @@ if __name__ == "__main__":
         else:
             if verbose:
                 print "[-] Rejected candidate: %s categorized as %s." % (host, cat)
-        time.sleep(random.randrange(10, 20))
+
+        time.sleep(random.randrange(MIN_BLUECOAT_TIME, MAX_BLUECOAT_TIME))
 
     print "[+] (%d) candidates found." % (len(candidates))
-
+    f = None
+    if output_file:
+        f = open(output_file, "w")
     for candidate in candidates:
-        request = urllib2.Request(urls["checkdomain"]["host"] + urls["checkdomain"]["get"] + candidate.split(".")[0])
-        request.add_header("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:49.0) Gecko/20100101 Firefox/49.0")
-        request.add_header("Referer", urls["checkdomain"]["host"])
-        response = urllib2.urlopen(request)
-
-        f = None
-        if output_file:
-            f = open(output_file, "w")
-        if not response.read().find("is still available") == -1:
+        if check_domain(candidate):
             print "[+] Awesome \"%s\" is categorized and available." % candidate
             if output_file:
                 f.write(candidate + "\n")
@@ -163,3 +208,7 @@ if __name__ == "__main__":
     print "[+] Search completed."
     if output_file:
         f.close()
+
+
+if __name__ == "__main__":
+    main()
